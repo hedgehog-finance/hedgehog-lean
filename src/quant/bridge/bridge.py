@@ -109,6 +109,7 @@ class Bridge:
             available = bool(self.options.upstream and self.options.upstream_token_file)
             reason = None if available else "Configure --upstream and --upstream-token-file for QuantDinger"
         return {"protocolVersion": "1.0", "providerId": provider, "version": version,
+                **({"markets": ["us-equity", "cn-equity", "hk-equity"], "marketAdapterVersion": "1.0.0"} if provider == "lean" and available else {}),
                 "operations": operations if available else [], "diagnostics": [reason] if reason else [],
                 "recovery": "query-only; interrupted jobs are never resubmitted automatically"}
 
@@ -255,6 +256,8 @@ class Bridge:
                 if request["operation"] != "simulate":
                     raise ValueError("Feed requires a simulation")
                 symbols = set(json.loads(request["input"]["dataset"]["symbols_json"]))
+                from markets import load_market, validate_bar
+                market = load_market(request["input"]["dataset"], [])
                 previous = {}
                 for saved in self.db.execute("SELECT payload FROM feeds WHERE run_id=?",(run_id,)):
                     for bar in json.loads(saved[0])["bars"]:
@@ -262,6 +265,7 @@ class Bridge:
                 if not 1 <= len(batch["bars"]) <= 1000:
                     raise ValueError("Invalid batch size")
                 for bar in batch["bars"]:
+                    validate_bar(market, bar, request["input"]["dataset"]["frequency"])
                     at = datetime.fromisoformat(bar["time"].replace("Z","+00:00")).timestamp()
                     available = datetime.fromisoformat(bar["availableAt"].replace("Z","+00:00")).timestamp()
                     if bar["symbol"] not in symbols or at <= previous.get(bar["symbol"],float('-inf')) or abs(time.time()-available) > 300 or at > available or available > time.time()+5:

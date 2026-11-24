@@ -47,6 +47,6 @@ The output contains a `lean-runtime/` directory, one platform archive, and its m
 
 ## Scope
 
-The initial adapter supports raw US-equity OHLCV data, USD, share-based volume, daily/minute backtests, and persistent local paper simulation. It exposes no live brokerage execution. It does not automatically fetch user market data or start strategies. The runtime itself is not a strategy security sandbox; Gateway applies an additional process sandbox on supported platforms.
+Independent `us-equity`, `cn-equity`, and `hk-equity` profiles support raw ordinary-equity OHLCV, share-based volume, daily/minute backtests, and local paper simulation. CN/HK execution requires an explicit versioned market-rules snapshot and per-bar trading status. See [Market adapters](docs/MARKETS.md) for the contract, execution assumptions, and limitations. It exposes no live brokerage execution. It does not automatically fetch user market data or start strategies. The runtime itself is not a strategy security sandbox; Gateway applies an additional process sandbox on supported platforms.
 
 Hedgehog additions use [LICENSE](LICENSE). Upstream LEAN retains [vendor/lean/LICENSE](vendor/lean/LICENSE).

@@ -11,30 +11,32 @@ import threading
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import zipfile
+from markets import load_market, local_time, validate_bar, write_databases, VERSION as MARKET_VERSION
 
 
 def run(data, runtime_root, paper, emit):
     root, folder = Path(runtime_root).resolve(), Path.cwd()
     manifest = json.loads((root / "runtime.json").read_text())
     dataset = data["dataset"]
-    adjustments = json.loads(dataset["adjustment_json"])
-    # v1 explicitly uses LEAN's USA equity calendars and settlement models.
-    if dataset["market"].lower() not in ("usa", "us") or adjustments.get("prices") != "raw" or adjustments.get("volumeUnit") != "shares" or adjustments.get("currency") != "USD":
-        raise ValueError("LEAN v1 requires USA equities, raw prices and shares; other markets need a market adapter")
+    market = load_market(dataset, data["bars"])
+    profile = market["profile"]
     symbols = json.loads(dataset["symbols_json"])
-    if any(not re.fullmatch(r"[A-Z][A-Z0-9.]{0,15}", symbol) for symbol in symbols):
-        raise ValueError("Unsupported equity symbol")
     data_root = folder / "data"
     for name in ("market-hours", "symbol-properties"):
         shutil.copytree(root / "data" / name, data_root / name, dirs_exist_ok=True)
+    write_databases(data_root, market)
+    shutil.copytree(Path(__file__).with_name("markets"), folder / "markets", dirs_exist_ok=True)
+    trading_state = folder / "market-events.jsonl"
+    trading_state.write_text("".join(json.dumps(bar) + "\n" for bar in data["bars"]))
     times = []
     bar_ends = {}
     for symbol in symbols:
         rows = [bar for bar in data["bars"] if bar["symbol"] == symbol]
         grouped = {}
         for bar in rows:
-            when = datetime.fromisoformat(bar["time"].replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
-            available = datetime.fromisoformat(bar["availableAt"].replace("Z", "+00:00")).astimezone(ZoneInfo("America/New_York"))
+            validate_bar(market, bar, dataset["frequency"])
+            when = local_time(bar["time"], profile)
+            available = local_time(bar["availableAt"], profile)
             # Raw equity bars must be available at their boundary; delayed observations
             # need a separate custom-data adapter, never silently backdate information.
             if available != when:
@@ -50,14 +52,14 @@ def run(data, runtime_root, paper, emit):
             line = ",".join([stamp] + [str(round(bar[key] * 10000)) for key in ("open", "high", "low", "close")] + [str(bar["volume"])])
             key = symbol.lower() if dataset["frequency"] == "daily" else start.strftime("%Y%m%d") + "_trade"
             grouped.setdefault(key, []).append(line)
-        directory = data_root / "equity/usa" / dataset["frequency"]
+        directory = data_root / "equity" / market["securities"][symbol]["exchange"] / dataset["frequency"]
         if dataset["frequency"] != "daily":
             directory /= symbol.lower()
         directory.mkdir(parents=True, exist_ok=True)
         for key, lines in grouped.items():
             with zipfile.ZipFile(directory / (key + ".zip"), "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr(key + ".csv", "\n".join(lines) + "\n")
-    settings = {"symbols": symbols, "barEnds": bar_ends, "frequency": dataset["frequency"], "cash": data["initialCash"], "commission": data["commission"], "slippage": data.get("slippage", 0),
+    settings = {"symbols": symbols, "barEnds": bar_ends, "market": market, "marketAdapterVersion": MARKET_VERSION, "frequency": dataset["frequency"], "cash": data["initialCash"], "commission": data["commission"], "slippage": data.get("slippage", 0),
                 "start": min(times).date().isoformat(), "end": max(times).date().isoformat(), "paper": paper}
     (folder / "settings.json").write_text(json.dumps(settings))
     (folder / "candidate.py").write_text(data["code"])
@@ -84,7 +86,7 @@ def run(data, runtime_root, paper, emit):
         "history-provider": ["QuantConnect.Lean.Engine.HistoricalData.SubscriptionDataReaderHistoryProvider"],
         "algorithm-id": "gateway", "debugging": False, "close-automatically": True,
         "environments": {"gateway": {}}, "log-handler": "QuantConnect.Logging.CompositeLogHandler",
-        "live-cash-balance": [{"currency": "USD", "amount": data["initialCash"], "conversion-rate": 1}],
+        "live-cash-balance": [{"currency": profile["currency"], "amount": data["initialCash"], "conversion-rate": 1}],
     }
     if manifest.get("pythonVenv"):
         config["python-venv"] = str(root / manifest["pythonVenv"])
@@ -107,6 +109,11 @@ def run(data, runtime_root, paper, emit):
         def push():
             for line in sys.stdin:
                 batch = json.loads(line)
+                for bar in batch["bars"]:
+                    validate_bar(market, bar, dataset["frequency"])
+                with trading_state.open("a") as state_stream:
+                    for bar in batch["bars"]:
+                        state_stream.write(json.dumps(bar) + "\n")
                 with feed.open("a") as stream:
                     for bar in batch["bars"]:
                         stream.write(json.dumps(bar) + "\n")

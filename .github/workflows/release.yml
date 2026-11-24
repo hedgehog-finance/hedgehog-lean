@@ -67,10 +67,13 @@ jobs:
           mkdir relocated
           tar -xzf output/lean-1.0.0-${{ matrix.target }}.tar.gz -C relocated
           if [ "$RUNNER_OS" = "Windows" ]; then
-            relocated/lean-runtime/python/python.exe tests/smoke.py relocated/lean-runtime
+            runtime_python=relocated/lean-runtime/python/python.exe
           else
-            relocated/lean-runtime/python/bin/python3 tests/smoke.py relocated/lean-runtime
+            runtime_python=relocated/lean-runtime/python/bin/python3
           fi
+          "$runtime_python" tests/smoke.py relocated/lean-runtime
+          "$runtime_python" tests/market_smoke.py relocated/lean-runtime
+          "$runtime_python" tests/test_market_profiles.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: runtime-${{ matrix.target }}
