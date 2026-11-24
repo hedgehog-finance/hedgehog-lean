@@ -34,6 +34,7 @@ def execute(code, minute=False, failure=False):
             return
         events = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
         assert any("result" in event for event in events), "Missing verified completion report"
+        assert all(event["data"]["currency"] == "USD" for event in events if event.get("event") in ("fill", "asset", "position")), "Account currency escaped the snapshot"
         if minute:
             assert next(event["timestamp"] for event in events if event.get("event") == "asset") == "2024-01-02T14:31:00Z"
         else:
@@ -44,5 +45,6 @@ def execute(code, minute=False, failure=False):
 execute(prefix + '    def on_data(self, data):\n        if not self.portfolio.invested: self.set_holdings("SPY", 0.5)\n')
 execute(prefix.replace("Resolution.DAILY", "Resolution.MINUTE") + '    def on_data(self, data):\n        pass\n', minute=True)
 execute(prefix + '    def on_data(self, data):\n        raise RuntimeError("intentional smoke failure")\n', failure=True)
-execute(prefix.replace('        self.add_equity', '        self.set_account_currency("EUR")\n        self.add_equity'), failure=True)
+execute(prefix.replace('        self.add_equity', '        self.set_account_currency("EUR")\n        self.add_equity') + '    def on_data(self, data):\n        if not self.portfolio.invested: self.set_holdings("SPY", 0.5)\n')
+execute(prefix.replace('        self.add_equity', '        self.portfolio.cash_book.account_currency = "EUR"\n        self.add_equity'), failure=True)
 print(f"PASS {manifest['target']}: relocated real backtest, fills/equity, minute timestamps, strategy failure")
