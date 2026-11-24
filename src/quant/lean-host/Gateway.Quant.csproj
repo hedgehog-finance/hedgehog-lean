@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LeanRoot Condition="'$(LeanRoot)' == ''">../../../runtimes/lean/engine</LeanRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="QuantConnect.Lean.Engine"><HintPath>$(LeanRoot)/QuantConnect.Lean.Engine.dll</HintPath></Reference>
+    <Reference Include="QuantConnect.Configuration"><HintPath>$(LeanRoot)/QuantConnect.Configuration.dll</HintPath></Reference>
+    <Reference Include="QuantConnect.Common"><HintPath>$(LeanRoot)/QuantConnect.Common.dll</HintPath></Reference>
+    <Reference Include="NodaTime"><HintPath>$(LeanRoot)/NodaTime.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

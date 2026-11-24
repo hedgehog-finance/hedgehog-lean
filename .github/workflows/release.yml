@@ -1,0 +1,96 @@
+name: Build and release LEAN runtimes
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lean-runtime-release
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: darwin-arm64
+          - runner: macos-15-intel
+            target: darwin-x64
+          - runner: windows-2022
+            target: win32-x64
+          - runner: ubuntu-22.04
+            target: linux-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      DOTNET_INSTALL_DIR: ${{ runner.temp }}/lean-dotnet
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/lean-python
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.404'
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          enable-cache: false
+      - name: Prepare portable Python and dependencies
+        shell: bash
+        run: |
+          uv python install 3.11.11
+          uv venv --python 3.11.11 .venv
+          uv pip install pandas==2.2.3 wrapt==1.16.0
+          npm ci
+      - name: Download pinned official source
+        shell: bash
+        run: curl --fail --location --retry 3 'https://codeload.github.com/QuantConnect/Lean/legacy.tar.gz/f696c556828e9b3ea6695cb4ac41ff233ba5f430' --output lean-source.tar.gz
+      - name: Build native runtime
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            python_path="$PWD/.venv/Scripts/python.exe"
+            dotnet_path="$DOTNET_INSTALL_DIR/dotnet.exe"
+          else
+            python_path="$PWD/.venv/bin/python"
+            dotnet_path="$DOTNET_INSTALL_DIR/dotnet"
+          fi
+          node scripts/build-lean-runtime.mjs --source-archive lean-source.tar.gz --python "$python_path" --dotnet "$dotnet_path" --output output
+      - name: Verify relocated package with real LEAN backtests
+        shell: bash
+        run: |
+          mkdir relocated
+          tar -xzf output/lean-1.0.0-${{ matrix.target }}.tar.gz -C relocated
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            relocated/lean-runtime/python/python.exe tests/smoke.py relocated/lean-runtime
+          else
+            relocated/lean-runtime/python/bin/python3 tests/smoke.py relocated/lean-runtime
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: runtime-${{ matrix.target }}
+          path: |
+            output/lean-1.0.0-${{ matrix.target }}.tar.gz
+            output/${{ matrix.target }}.json
+          if-no-files-found: error
+          compression-level: 0
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: runtime-*
+          merge-multiple: true
+          path: release
+      - name: Verify all four packages and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python tests/verify_release.py release
+          gh release create v1.0.0 release/* --target "$GITHUB_SHA" --title 'Hedgehog LEAN 1.0.0' --notes-file RELEASE_NOTES.md

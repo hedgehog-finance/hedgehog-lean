@@ -1,0 +1,5 @@
+vendor/lean/** linguist-vendored
+*.sh text eol=lf
+*.py text eol=lf
+*.mjs text eol=lf
+*.yml text eol=lf

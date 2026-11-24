@@ -1,0 +1,10 @@
+{
+  "name": "@hedgehog-finance/lean-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Rebuildable LEAN runtime and Gateway bridge, without live brokerage execution",
+  "dependencies": { "tar": "7.5.22" },
+  "engines": { "node": ">=22" }
+}

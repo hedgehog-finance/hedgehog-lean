@@ -1,0 +1,9 @@
+/node_modules/
+/dist/
+/output/
+/.venv/
+**/__pycache__/
+**/obj/
+**/bin/
+*.pyc
+.DS_Store
