@@ -96,7 +96,7 @@ def run(data, runtime_root, paper, emit):
                DOTNET_ROOT=str(root / "dotnet"), DOTNET_CLI_HOME=str(folder), DOTNET_CLI_TELEMETRY_OPTOUT="1")
     with (folder / "lean.log").open("wb") as log:
         child = subprocess.Popen([str(root / manifest["dotnet"]), str(root / "engine/QuantConnect.Lean.Launcher.dll"), "--config", str(folder / "config.json")],
-                                 cwd=root / "engine", env=env, stdout=log, stderr=subprocess.STDOUT)
+                                 cwd=root / "engine", env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
     def stop(*_args):
         child.terminate()
         try:

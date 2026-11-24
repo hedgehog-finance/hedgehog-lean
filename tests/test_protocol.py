@@ -59,6 +59,16 @@ class ProtocolTest(unittest.TestCase):
             stop_worker(child)
             run.assert_not_called()
 
+    def test_worker_preserves_windows_system_environment_without_unrelated_secrets(self):
+        settings = {"SYSTEMROOT": "C:/Windows", "WINDIR": "C:/Windows", "TMP": "C:/Temp", "COMSPEC": "C:/Windows/System32/cmd.exe", "UNRELATED_SECRET": "not-for-worker"}
+        with patch.dict(os.environ, settings), patch("bridge.subprocess.Popen", return_value=MagicMock()) as spawn, patch("bridge.threading.Thread"):
+            self.bridge.run("environment", "test", {})
+            env = spawn.call_args.kwargs["env"]
+            for key in ("SYSTEMROOT", "WINDIR", "TMP", "COMSPEC"):
+                self.assertEqual(env[key], settings[key])
+            self.assertNotIn("UNRELATED_SECRET", env)
+        self.bridge.children.clear()
+
     def test_windows_parent_exit_uses_a_handle_and_stops_only_its_own_tree(self):
         api = SimpleNamespace(SYNCHRONIZE=0x100000, INFINITE=0xFFFFFFFF,
                               OpenProcess=MagicMock(return_value=41), WaitForSingleObject=MagicMock(return_value=0), CloseHandle=MagicMock())

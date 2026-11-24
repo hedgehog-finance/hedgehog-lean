@@ -7,6 +7,7 @@ Runtime and market-adapter patch release. The release workflow builds and verifi
 - Keep early paper-feed data until subscriptions exist, and buffer partial file writes until their newline commit.
 - Cancel owned Windows worker process trees, including the .NET child. Monitor the parent through a process handle rather than its retained PID, and stop the worker's own tree when the owner exits. The release gate exercises cancellation and parent-exit cleanup with a real paper engine on every target.
 - Preserve external providers' user configuration directories, while keeping LEAN jobs isolated. Set worker UTF-8 explicitly and force cleanup after malformed worker output.
+- Preserve Windows system environment keys regardless of casing, and isolate the engine's stdin from the worker's feed pipe.
 
 Native release checks cover real US/CN/HK backtests, account-currency rejection, aggregate bar-volume limits, paper initialization/cancellation and owner-exit cleanup, partial file-feed writes, and protocol regressions. See README for local test commands. No new Gateway business tables are required; cancellation tombstones use the existing bridge journal. Full Gateway application sandbox acceptance outside macOS Apple Silicon and continuous market-hours execution remain separate checks.
 

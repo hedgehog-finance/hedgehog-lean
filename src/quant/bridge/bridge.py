@@ -144,7 +144,9 @@ class Bridge:
         request.write_text(json.dumps({"provider": self.options.provider, "operation": operation, "input": data,
                                        "leanRoot": self.options.lean_root, "model": self.options.model,
                                        "upstream": self.options.upstream, "upstreamTokenFile": self.options.upstream_token_file,"parentPid":os.getpid()}))
-        env = {key: value for key, value in os.environ.items() if key in ("PATH", "SystemRoot", "TEMP", "TMPDIR", "LANG", "DOTNET_ROOT", "PYTHONNET_PYDLL", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME")}
+        # Windows exposes environment keys in uppercase, including SYSTEMROOT.
+        allowed = {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "TEMP", "TMP", "TMPDIR", "LANG", "DOTNET_ROOT", "PYTHONNET_PYDLL", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME"}
+        env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
         if self.options.provider == "lean":
             env.update(HOME=str(folder), USERPROFILE=str(folder))
         env.update(PYTHONUTF8="1", PYTHONUNBUFFERED="1", PYTHONNOUSERSITE="1")
