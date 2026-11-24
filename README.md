@@ -15,6 +15,8 @@ Native packages are published under [Releases](https://github.com/hedgehog-finan
 
 Each archive has a matching `<platform>.json` manifest containing its version, upstream commit, byte length, and SHA-256. Verify the manifest and archive before installation. The release workflow publishes only after all four native builds and smoke tests succeed. Linux builds target Ubuntu 22.04; other distributions must satisfy .NET's native library requirements.
 
+CI checks out the integration and build files, then downloads the checksum-pinned official source archive. It avoids fetching the same upstream source twice; the full vendored snapshot remains available in this repository for inspection.
+
 Gateway tries `download.ciweiai.com` first, then this repository's GitHub Release, then downloads the pinned official LEAN source and builds locally. Source builds require an existing compatible toolchain. A source archive is not an installable runtime archive.
 
 ## Source layout and provenance
