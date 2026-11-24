@@ -17,7 +17,7 @@ Each archive has a matching `<platform>.json` manifest containing its version, u
 
 CI checks out the integration and build files, then downloads the checksum-pinned official source archive. It avoids fetching the same upstream source twice; the full vendored snapshot remains available in this repository for inspection.
 
-Gateway tries `download.ciweiai.com` first, then this repository's GitHub Release, then downloads the pinned official LEAN source and builds locally. Source builds require an existing compatible toolchain. A source archive is not an installable runtime archive.
+Gateway tries `download.ciweiai.com` first, then this repository's GitHub Release. If both download sources are unavailable, it reports the failure and offers a reinstall action. Gateway does not automatically download source, install a build toolchain, or compile the engine. Developers can still build manually using the instructions below; a source archive is not an installable runtime archive.
 
 ## Source layout and provenance
 
