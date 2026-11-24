@@ -47,6 +47,22 @@ def identifier(value):
     return value
 
 
+def stop_worker(child, force=False):
+    if child.poll() is not None:
+        return
+    if sys.platform == "win32":
+        # TerminateProcess does not run Python's SIGTERM handler. Include the
+        # owned worker's .NET child instead of terminating only its Python host.
+        command = str(Path(os.environ.get("SystemRoot", "C:/Windows")) / "System32/taskkill.exe")
+        result = subprocess.run([command, "/PID", str(child.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        if result.returncode and child.poll() is None:
+            raise RuntimeError("Could not stop the owned worker process tree")
+    elif force:
+        child.kill()
+    else:
+        child.terminate()
+
+
 class Bridge:
     def __init__(self, options):
         self.options = options
@@ -109,7 +125,7 @@ class Bridge:
             available = bool(self.options.upstream and self.options.upstream_token_file)
             reason = None if available else "Configure --upstream and --upstream-token-file for QuantDinger"
         return {"protocolVersion": "1.0", "providerId": provider, "version": version,
-                **({"markets": ["us-equity", "cn-equity", "hk-equity"], "marketAdapterVersion": "1.0.0"} if provider == "lean" and available else {}),
+                **({"markets": ["us-equity", "cn-equity", "hk-equity"], "marketAdapterVersion": "1.0.1"} if provider == "lean" and available else {}),
                 "operations": operations if available else [], "diagnostics": [reason] if reason else [],
                 "recovery": "query-only; interrupted jobs are never resubmitted automatically"}
 
@@ -128,8 +144,10 @@ class Bridge:
         request.write_text(json.dumps({"provider": self.options.provider, "operation": operation, "input": data,
                                        "leanRoot": self.options.lean_root, "model": self.options.model,
                                        "upstream": self.options.upstream, "upstreamTokenFile": self.options.upstream_token_file,"parentPid":os.getpid()}))
-        env = {key: value for key, value in os.environ.items() if key in ("PATH", "SystemRoot", "TEMP", "TMPDIR", "LANG", "DOTNET_ROOT", "PYTHONNET_PYDLL")}
-        env.update(HOME=str(folder), USERPROFILE=str(folder), PYTHONUNBUFFERED="1", PYTHONNOUSERSITE="1")
+        env = {key: value for key, value in os.environ.items() if key in ("PATH", "SystemRoot", "TEMP", "TMPDIR", "LANG", "DOTNET_ROOT", "PYTHONNET_PYDLL", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME")}
+        if self.options.provider == "lean":
+            env.update(HOME=str(folder), USERPROFILE=str(folder))
+        env.update(PYTHONUTF8="1", PYTHONUNBUFFERED="1", PYTHONNOUSERSITE="1")
         with self.lock:
             if self.closed:
                 raise ValueError("Bridge is shutting down")
@@ -158,8 +176,12 @@ class Bridge:
                 error = "Worker failed; inspect its local log"
         except Exception:
             error = "Invalid worker output; inspect its local log"
-            child.terminate()
-            child.wait(timeout=10)
+            stop_worker(child)
+            try:
+                child.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                stop_worker(child, force=True)
+                child.wait()
         with self.lock:
             row = self.db.execute("SELECT status FROM runs WHERE id=?", (run_id,)).fetchone()
             status = "interrupted" if self.closed else "cancelled" if row[0] == "cancel_requested" else "failed" if error else "completed"
@@ -216,9 +238,15 @@ class Bridge:
         with self.lock:
             row = self.db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
             if row is None and method == "cancel" and self.options.provider != "quantdinger":
-                # The user explicitly cancels an uncertain submission. This
-                # journal owner has no local worker; never start one to cancel it.
-                return {"runId": run_id, "absent": True}
+                # Persist a tombstone before acknowledging absence. A delayed
+                # submit with the same identity must never start a new worker.
+                generation = identifier(params["generation"])
+                fingerprint = params["fingerprint"]
+                if not isinstance(fingerprint, str) or not fingerprint:
+                    raise ValueError("Cancellation requires the original request fingerprint")
+                self.db.execute("INSERT INTO runs VALUES(?,?,?,'cancelled',NULL)", (run_id, generation, fingerprint))
+                self.db.commit()
+                return {"runId": run_id, "generation": generation, "absent": True, "cancellationRecorded": True}
             if not row or row["generation"] != params["generation"]:
                 raise ValueError("Run not found or generation mismatch")
             if method == "status":
@@ -232,7 +260,7 @@ class Bridge:
                 if child:
                     self.db.execute("UPDATE runs SET status='cancel_requested' WHERE id=?", (run_id,))
                     self.db.commit()
-                    child.terminate()
+                    stop_worker(child)
                 elif row["status"] == "interrupted" and self.options.provider != "quantdinger":
                     # This bridge has exclusive ownership of the journal and no child.
                     self.db.execute("UPDATE runs SET status='cancelled' WHERE id=?", (run_id,))
@@ -285,12 +313,13 @@ class Bridge:
             self.closed = True
             children = list(self.children.values())
         for child in children:
-            child.terminate()
+            stop_worker(child)
         for child in children:
             try:
                 child.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                child.kill()
+                stop_worker(child, force=True)
+                child.wait()
         # No automatic resume: journal status must be explicitly reconciled.
 
 

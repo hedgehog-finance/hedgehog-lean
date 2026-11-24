@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using System.Text;
 using QuantConnect.Configuration;
 using QuantConnect.Data;
 using QuantConnect.Data.Market;
@@ -34,10 +35,29 @@ public sealed class FileDataQueue : IDataQueueHandler
     {
         using var file = new FileStream(Config.Get("gateway-feed-file"), FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var stream = new StreamReader(file);
+        var pending = new StringBuilder();
+        var buffer = new char[4096];
         while (!cancellation.IsCancellationRequested)
         {
-            var line = await stream.ReadLineAsync(cancellation.Token);
-            if (line == null) { await Task.Delay(100, cancellation.Token); continue; }
+            // Early feeds remain on disk until the algorithm subscribes. A file
+            // append can be observed mid-line, so parse only newline commits.
+            if (subscriptions.IsEmpty) { await Task.Delay(100, cancellation.Token); continue; }
+            var count = await stream.ReadAsync(buffer.AsMemory(), cancellation.Token);
+            if (count == 0) { await Task.Delay(100, cancellation.Token); continue; }
+            pending.Append(buffer, 0, count);
+            string text = pending.ToString();
+            int offset = 0, newline;
+            while ((newline = text.IndexOf('\n', offset)) >= 0)
+            {
+                Publish(text.Substring(offset, newline - offset));
+                offset = newline + 1;
+            }
+            pending.Remove(0, offset);
+            if (pending.Length > 1024 * 1024) throw new InvalidDataException("Gateway bar exceeds the feed limit");
+        }
+    }
+    private void Publish(string line)
+    {
             using var document = JsonDocument.Parse(line);
             var bar = document.RootElement;
             foreach (var pair in subscriptions)
@@ -54,7 +74,6 @@ public sealed class FileDataQueue : IDataQueueHandler
                 pair.Value.Queue.Enqueue(value);
                 pair.Value.Changed(this, EventArgs.Empty);
             }
-        }
     }
     public void Dispose()
     {

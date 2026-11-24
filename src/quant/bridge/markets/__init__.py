@@ -12,7 +12,7 @@ from .cn_equity import PROFILE as CN
 from .hk_equity import PROFILE as HK
 
 PROFILES = {profile["id"]: profile for profile in (US, CN, HK)}
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 
 def profile_for(market):

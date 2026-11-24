@@ -56,7 +56,11 @@ class CashEquityFillModel(FillModel):
         if reason:
             fill.status, fill.message = OrderStatus.INVALID, reason
             return fill
-        if abs(quantity) > float(bar.volume):
+        # All orders for a symbol share the observed bar's liquidity budget.
+        previous_end, used = self.algorithm._market_filled_volume.get(symbol, (None, 0))
+        if previous_end != end:
+            used = 0
+        if used + abs(quantity) > float(bar.volume):
             return fill
         buy = quantity > 0
         price = execution_price(market["securities"][symbol], float(bar.close), self.settings["slippage"], buy)
@@ -70,4 +74,5 @@ class CashEquityFillModel(FillModel):
             return fill
         fill.status, fill.fill_quantity, fill.fill_price = OrderStatus.FILLED, order.quantity, price
         fill.order_fee = OrderFee(CashAmount(fee, market["profile"]["currency"]))
+        self.algorithm._market_filled_volume[symbol] = (end, used + abs(quantity))
         return fill

@@ -1,6 +1,6 @@
 # Equity market adapters
 
-The market adapter version is `1.0.0`. Three independent profiles live under `src/quant/bridge/markets`: `us-equity`, `cn-equity`, and `hk-equity`. Gateway owns data ingestion, user configuration, and durable results. These modules own engine-facing market rules and execution modeling. They use LEAN extension points; no additional engine fork is required.
+The market adapter version is `1.0.1`. Three independent profiles live under `src/quant/bridge/markets`: `us-equity`, `cn-equity`, and `hk-equity`. Gateway owns data ingestion, user configuration, and durable results. These modules own engine-facing market rules and execution modeling. They use LEAN extension points; no additional engine fork is required.
 
 | Profile | Currency / time zone | Model |
 | --- | --- | --- |
@@ -9,6 +9,8 @@ The market adapter version is `1.0.0`. Three independent profiles live under `sr
 | `hk-equity` | HKD / Asia/Hong_Kong | Ordinary cash HKEX equities; same-day selling is allowed; security-specific board lots |
 
 Each run covers one market profile and account currency. Mixed-currency portfolios and FX conversions are not implemented. ETFs, bonds, derivatives, short selling, margin lending, auction matching, and corporate actions are outside the CN/HK model. The input must explicitly assert a corporate-action-free interval. These restrictions are assumptions of this adapter, not a claim about everything an exchange supports.
+
+Version 1.0.1 checks the account currency again after candidate initialization for all three profiles. The published v1.0.0 assets remain unchanged; see [release notes](../RELEASE_NOTES.md#v101).
 
 ## Immutable rule snapshot
 
@@ -64,7 +66,7 @@ Every CN/HK bar also carries `tradingStatus`: `normal`, `halted`, or `restricted
 
 The CN/HK model executes market intents at the **next observed eligible bar close**, with the configured slippage and tick rounding. It will not fill using the same close that produced the signal. LEAN's internally generated opening/closing proxies are normalized to this model; explicit auction helper calls and limit/stop orders are rejected. This is an OHLCV simulation model, not exchange order-book matching.
 
-Halted/restricted bars, zero volume, price-limit-blocked directions, and orders larger than observed bar volume do not fill. Slippage-adjusted prices must remain inside the observed high/low range. It uses whole fills rather than inventing queue positions or partial-fill liquidity. An order may remain pending until an eligible bar or explicit cancellation.
+Halted/restricted bars, zero volume, price-limit-blocked directions, and orders larger than observed bar volume do not fill. Version 1.0.1 shares the observed volume budget across all orders for the same security and bar, instead of allowing each order to reuse the full bar volume. Slippage-adjusted prices must remain inside the observed high/low range. It uses whole fills rather than inventing queue positions or partial-fill liquidity. An order may remain pending until an eligible bar or explicit cancellation.
 
 Buy orders require sufficient cash including modeled fees. Sell orders cannot create a short position. CN purchases become sellable on a later trading date; HK purchases can be resold the same day. Cash accounting is explicitly trade-date accounting: it does not model clearing, withdrawal availability, or legal custody settlement. Unfilled orders do not count as executed trades.
 

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/quant/lean-host/FileDataQueue.cs" Link="FileDataQueue.cs" />
+    <Reference Include="$(LeanRoot)/*.dll" />
+    <Reference Remove="$(LeanRoot)/Gateway.Quant.dll" />
+  </ItemGroup>
+</Project>

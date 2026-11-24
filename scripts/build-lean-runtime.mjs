@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import * as tar from 'tar';
 
-const VERSION='1.0.0', COMMIT='f696c556828e9b3ea6695cb4ac41ff233ba5f430';
+const VERSION='1.0.1', COMMIT='f696c556828e9b3ea6695cb4ac41ff233ba5f430';
 function copyTree(source,destination,ancestors=new Set()) {
   const actual=realpathSync(source),info=statSync(actual);
   if(info.isDirectory()){

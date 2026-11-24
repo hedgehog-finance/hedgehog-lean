@@ -68,17 +68,18 @@ class GatewayHostAlgorithm(GatewayStrategy):
         market = SETTINGS["market"]
         profile = market["profile"]
         self._market_buys, self._market_states, self._market_offset = {}, {}, 0
+        self._market_filled_volume = {}
+        self.set_account_currency(profile["currency"])
         if market["rules"]:
             for exchange, identifier in profile["exchanges"].items():
                 if Market.encode(exchange) is None:
                     Market.add(exchange, identifier)
             self.set_time_zone(profile["timezone"])
-            self.set_account_currency(profile["currency"])
             self.set_brokerage_model(CashEquityBrokerageModel())
         super().initialize()
+        if self.account_currency != profile["currency"]:
+            raise ValueError("Strategy account currency must match its market snapshot")
         if market["rules"]:
-            if self.account_currency != profile["currency"]:
-                raise ValueError("Strategy account currency must match its market snapshot")
             self.set_brokerage_model(CashEquityBrokerageModel())
         self.set_cash(SETTINGS["cash"])
         self.settings.daily_precise_end_time = True

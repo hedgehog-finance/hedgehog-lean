@@ -44,4 +44,5 @@ def execute(code, minute=False, failure=False):
 execute(prefix + '    def on_data(self, data):\n        if not self.portfolio.invested: self.set_holdings("SPY", 0.5)\n')
 execute(prefix.replace("Resolution.DAILY", "Resolution.MINUTE") + '    def on_data(self, data):\n        pass\n', minute=True)
 execute(prefix + '    def on_data(self, data):\n        raise RuntimeError("intentional smoke failure")\n', failure=True)
+execute(prefix.replace('        self.add_equity', '        self.set_account_currency("EUR")\n        self.add_equity'), failure=True)
 print(f"PASS {manifest['target']}: relocated real backtest, fills/equity, minute timestamps, strategy failure")

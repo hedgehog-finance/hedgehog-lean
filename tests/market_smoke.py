@@ -57,6 +57,14 @@ if __name__ == "__main__":
         else:
             assert [event for event in fills if float(event["data"]["quantity"])<0][0]["timestamp"]=="2024-01-02T01:33:00Z"
         assert all(event["data"]["currency"]==("CNY" if profile=="cn-equity" else "HKD") for event in fills)
+        limited=fixture(profile,"minute")
+        symbol=json.loads(limited["dataset"]["symbols_json"])[0]
+        for bar in limited["bars"]:bar["volume"]=100
+        limited["code"]=limited["code"].split('    def on_data')[0]+f'    def on_data(self, data):\n        self.n += 1\n        if self.n == 1:\n            self.market_order("{symbol}", 100)\n            self.market_order("{symbol}", 100)\n'
+        limited_fills=[event for event in execute(limited) if event.get("event")=="fill"]
+        totals={}
+        for event in limited_fills:totals[event["timestamp"]]=totals.get(event["timestamp"],0)+abs(float(event["data"]["quantity"]))
+        assert len(limited_fills)==2 and all(total<=100 for total in totals.values()),limited_fills
         blocked=fixture(profile)
         blocked["bars"][1]["tradingStatus"]="restricted"
         blocked["bars"][2]["tradingStatus"]="halted"

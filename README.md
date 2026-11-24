@@ -8,16 +8,18 @@ Native packages are published under [Releases](https://github.com/hedgehog-finan
 
 | Platform | Archive |
 | --- | --- |
-| macOS Apple Silicon | `lean-1.0.0-darwin-arm64.tar.gz` |
-| macOS Intel | `lean-1.0.0-darwin-x64.tar.gz` |
-| Windows x64 | `lean-1.0.0-win32-x64.tar.gz` |
-| Linux x64 | `lean-1.0.0-linux-x64.tar.gz` |
+| macOS Apple Silicon | `lean-1.0.1-darwin-arm64.tar.gz` |
+| macOS Intel | `lean-1.0.1-darwin-x64.tar.gz` |
+| Windows x64 | `lean-1.0.1-win32-x64.tar.gz` |
+| Linux x64 | `lean-1.0.1-linux-x64.tar.gz` |
 
 Each archive has a matching `<platform>.json` manifest containing its version, upstream commit, byte length, and SHA-256. Verify the manifest and archive before installation. The release workflow publishes only after all four native builds and smoke tests succeed. Linux builds target Ubuntu 22.04; other distributions must satisfy .NET's native library requirements.
 
 CI checks out the integration and build files, then downloads the checksum-pinned official source archive. It avoids fetching the same upstream source twice; the full vendored snapshot remains available in this repository for inspection.
 
 Gateway tries `download.ciweiai.com` first, then this repository's GitHub Release. If both download sources are unavailable, it reports the failure and offers a reinstall action. Gateway does not automatically download source, install a build toolchain, or compile the engine. Developers can still build manually using the instructions below; a source archive is not an installable runtime archive.
+
+Version 1.0.1 includes the [runtime audit fixes](RELEASE_NOTES.md#v101). Release publication requires successful native checks on all four targets; the older v1.0.0 archives remain unchanged.
 
 ## Source layout and provenance
 
@@ -26,6 +28,9 @@ Gateway tries `download.ciweiai.com` first, then this repository's GitHub Releas
 - `src/quant/bridge/`: the Python JSON-RPC bridge, market-data mapping, backtest host, and persistent paper-simulation host. Shared bridge mappings for external providers are included; their dependencies are not installed in the runtime.
 - `scripts/build-lean-runtime.mjs`: source verification, explicit patching, native compilation, packaging, and manifest generation.
 - `tests/smoke.py`: real LEAN backtests using the packaged Python and .NET, including fills/equity, minute timestamps, and strategy failure handling.
+- `tests/lifecycle_smoke.py`: a real persistent paper engine, verified cancellation, and worker/engine cleanup after bridge process failure on each native platform.
+- `tests/test_protocol.py`: durable cancellation, external worker configuration, and process ownership regressions; Windows APIs are mocked when running on another platform.
+- `tests/feed-fixture/`: a .NET fixture using the actual file data queue, covering early subscriptions, partial writes, and minute bar timestamps.
 - `.github/workflows/release.yml`: native builds and release publication for all four targets.
 - [DEPENDENCIES.md](DEPENDENCIES.md): pinned dependencies, upstream source locations, and license information.
 
@@ -41,6 +46,10 @@ npm ci
 curl --fail --location 'https://codeload.github.com/QuantConnect/Lean/legacy.tar.gz/f696c556828e9b3ea6695cb4ac41ff233ba5f430' --output lean-source.tar.gz
 node scripts/build-lean-runtime.mjs --source-archive lean-source.tar.gz --python /absolute/path/to/venv/python --dotnet /absolute/path/to/dotnet --output /absolute/path/to/new-output
 python tests/smoke.py /absolute/path/to/new-output/lean-runtime
+python tests/market_smoke.py /absolute/path/to/new-output/lean-runtime src/quant/bridge
+python tests/lifecycle_smoke.py /absolute/path/to/new-output/lean-runtime
+python -m unittest discover -s tests -p test_protocol.py
+dotnet run --project tests/feed-fixture/FeedFixture.csproj -p:LeanRoot=/absolute/path/to/new-output/lean-runtime/engine
 ```
 
 Official source archive SHA-256: `cd0eaaebe74a75ad4371206bfde93c645495050ca3bc353cddec2ee597a36203`. The build explicitly applies a Python shutdown GIL-lifetime patch and includes its explanation in the runtime archive.

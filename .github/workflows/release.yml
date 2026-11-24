@@ -72,7 +72,7 @@ jobs:
         shell: bash
         run: |
           mkdir relocated
-          tar -xzf output/lean-1.0.0-${{ matrix.target }}.tar.gz -C relocated
+          tar -xzf output/lean-1.0.1-${{ matrix.target }}.tar.gz -C relocated
           if [ "$RUNNER_OS" = "Windows" ]; then
             runtime_python=relocated/lean-runtime/python/python.exe
           else
@@ -81,11 +81,18 @@ jobs:
           "$runtime_python" tests/smoke.py relocated/lean-runtime
           "$runtime_python" tests/market_smoke.py relocated/lean-runtime
           "$runtime_python" tests/test_market_profiles.py
+          "$runtime_python" tests/test_protocol.py
+          "$runtime_python" tests/lifecycle_smoke.py relocated/lean-runtime
+      - name: Verify native file data queue
+        shell: bash
+        run: |
+          lean_root="$(node -e 'process.stdout.write(require("node:path").resolve("relocated/lean-runtime/engine"))')"
+          dotnet run --project tests/feed-fixture/FeedFixture.csproj "-p:LeanRoot=$lean_root" --no-launch-profile
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: runtime-${{ matrix.target }}
           path: |
-            output/lean-1.0.0-${{ matrix.target }}.tar.gz
+            output/lean-1.0.1-${{ matrix.target }}.tar.gz
             output/${{ matrix.target }}.json
           if-no-files-found: error
           compression-level: 0
@@ -108,4 +115,4 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python tests/verify_release.py release
-          gh release create v1.0.0 release/* --target "$GITHUB_SHA" --title 'Hedgehog LEAN 1.0.0' --notes-file RELEASE_NOTES.md
+          gh release create v1.0.1 release/* --target "$GITHUB_SHA" --title 'Hedgehog LEAN 1.0.1' --notes-file RELEASE_NOTES.md
